@@ -75,7 +75,6 @@ function writeSeedCatalogVersion() {
       SEED_CATALOG_VERSION,
     );
   } catch {
-    // Ignore write failures for storage-constrained environments.
   }
 }
 
