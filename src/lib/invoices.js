@@ -14,8 +14,9 @@ export const PAYMENT_TERMS_OPTIONS = [
   { value: 21, label: 'Net 21 Days' },
   { value: 30, label: 'Net 30 Days' },
 ];
-const SEED_CATALOG_VERSION = '3';
+const SEED_CATALOG_VERSION = '4';
 const SEED_CATALOG_STORAGE_KEY = 'invoice-seed-catalog-version';
+const SEEDED_INVOICE_IDS = new Set(seedInvoices.map((invoice) => invoice.id));
 const BACKFILL_SEED_IDS = new Set([
   'LK7291',
   'VR3158',
@@ -279,16 +280,30 @@ export async function initializeInvoiceCollection() {
   }
 
   if (readSeedCatalogVersion() !== SEED_CATALOG_VERSION) {
-    const storedIds = new Set(storedInvoices.map((invoice) => invoice.id));
+    const seededInvoiceMap = new Map(
+      seededInvoices.map((invoice) => [invoice.id, invoice]),
+    );
+    const syncedStoredInvoices = storedInvoices.map((invoice) => {
+      return SEEDED_INVOICE_IDS.has(invoice.id)
+        ? seededInvoiceMap.get(invoice.id) ?? invoice
+        : invoice;
+    });
+    const storedIds = new Set(
+      syncedStoredInvoices.map((invoice) => invoice.id),
+    );
     const missingCatalogInvoices = seededInvoices.filter((invoice) => {
       return BACKFILL_SEED_IDS.has(invoice.id) && !storedIds.has(invoice.id);
     });
 
-    if (missingCatalogInvoices.length) {
-      const mergedInvoices = sortInvoices([
-        ...storedInvoices,
-        ...missingCatalogInvoices,
-      ]);
+    const mergedInvoices = sortInvoices([
+      ...syncedStoredInvoices,
+      ...missingCatalogInvoices,
+    ]);
+
+    if (
+      missingCatalogInvoices.length ||
+      JSON.stringify(mergedInvoices) !== JSON.stringify(storedInvoices)
+    ) {
       await replaceInvoicesStore(mergedInvoices);
       writeSeedCatalogVersion();
       return mergedInvoices;
